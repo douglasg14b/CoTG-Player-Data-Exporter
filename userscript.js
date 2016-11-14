@@ -252,7 +252,12 @@ function scoutDataCtrl($scope, $http, $timeout){
     self.getScoutData = getReportsForCities;
 
     function updatePastedData(){
-        let idArray = self.pastedCityData.split(',');
+        let idArray = [];
+        if(self.pastedCityData.indexOf(',') !== -1){
+            idArray = self.pastedCityData.split(',');
+        } else if(self.pastedCityData.indexOf('\n') !== -1){
+            idArray = self.pastedCityData.split('\n');
+        }
         for(let i = 0; i < idArray.length; i++){
             if(!isNaN(idArray[i]) && idArray[i] !== ''){
                 if(typeof self.cityDataHash[idArray[i]] == 'undefined'){
@@ -453,7 +458,7 @@ function mainPage(){
                                     <div ng-if="main.mode == \'scoutData\'" ng-controller="scoutDataCtrl as scout" class="ui segment">\
                                         <div class="ui form">\
                                             <div class="field">\
-                                                <textarea ng-change="scout.updatePastedData()" ng-model="scout.pastedCityData" rows=4 placeholder="Paste city IDs here"></textarea>\
+                                                <textarea ng-change="scout.updatePastedData()" ng-model="scout.pastedCityData" rows=4 placeholder="Paste city IDs here (comma or newline delimited)"></textarea>\
                                             </div>\
                                         </div>\
                                         <div style="margin: 1em;"></div>\
