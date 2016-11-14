@@ -8,9 +8,9 @@
 // @grant        GM_addStyle
 // @grant        GM_getResourceText
 // @require      https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js
-// @require      https://ajax.googleapis.com/ajax/libs/angularjs/1.5.7/angular.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/PapaParse/4.1.2/papaparse.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.2.4/semantic.min.js
+// @require      https://ajax.googleapis.com/ajax/libs/angularjs/1.5.7/angular.min.js
 // @resource semanticCss https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.2.4/semantic.min.css
 // ==/UserScript==
 
@@ -24,7 +24,8 @@
 
     let module = angular.module('app', [])
         .controller('mainController', ['$scope', mainController])
-        .controller('cityDataCtrl', ['$scope', '$http', cityDataCtrl]);
+        .controller('cityDataCtrl', ['$scope', '$http', cityDataCtrl])
+        .controller('scoutDataCtrl', ['$scope', '$http', scoutDataCtrl]);
 
     angular.bootstrap(document, ['app']);
 
@@ -232,6 +233,108 @@ function cityDataCtrl($scope, $http){
 
 }
 
+function scoutDataCtrl($scope, $http){
+    let self = this;
+
+    self.loading = false;
+    self.paused = false;
+    self.currentIndex = 0;
+    self.pastedCityData = '';
+    self.cityDataArray = [];
+    self.cityDataHash = {};
+
+    self.mappings = new dataMappings();
+
+    self.updatePastedData = updatePastedData;
+    self.clearCityData = clearCityData;
+    self.getScoutData = getReportsForCities;
+
+    function updatePastedData(){
+        let idArray = self.pastedCityData.split(',');
+        for(let i = 0; i < idArray.length; i++){
+            if(!isNaN(idArray[i]) && idArray[i] !== ''){
+                if(typeof self.cityDataHash[idArray[i]] == 'undefined'){
+                    let newCity = {
+                        id: idArray[i],
+                        loaded: false,
+                        reportIds: [],
+                        report: {}
+                    };
+
+                    self.cityDataArray.push(newCity);
+                    self.cityDataHash[idArray[i]] = newCity;
+                }
+            }
+        }
+    }
+
+    function getReportsForCities(){
+        let data = self.cityDataArray;
+        if(!self.paused){
+            self.loading = true;
+            if(self.currentIndex < data.length){
+                $http({
+                    method: 'POST',
+                    url: 'https://w5.crownofthegods.com/includes/gCi.php', 
+                    data: $.param({a: data[self.currentIndex].id}),
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'}                    
+                }).then(function(results){
+                    let mapped = mapCityDetails(results.data);
+                    let reportsList = parseIndividualReportsFromResultsTable(mapped.reportTable);
+                })
+            }
+        }
+    }
+
+    //Maps the city details results to human readable properties
+    function mapCityDetails(data){
+        let cityDetails = {};
+        for(let prop in self.mappings.cityDetailsMap){
+            cityDetails[prop] = data[self.mappings.cityDetailsMap[prop]];
+        }
+        console.log(cityDetails);
+        return cityDetails;
+    }
+
+    //Parses out each of the reports basic info from the city details results
+    function parseIndividualReportsFromResultsTable(table){
+        let reports = [];
+        $('#reportsTable').html(table);
+        $('#reportsTable [id="cityinfotablebody"]').each(function(){
+            let report = {};
+            report.id = $(this).find('[id="reportIDcityinfo"]').attr('data');
+            report.date = $(this).find('[id="reporttimecityinfo"]').text();
+            report.type = $(this).find('[id="reportIDcityinfo"]').text();
+            report.type = report.type.substring(0, report.type.indexOf(':'));
+            console.log(report);
+            report.push(report);
+        });
+        return reports;
+    }
+
+    function getValidReportForCity(reports){
+        for(var i = 0; i < reports.length; i++){
+            $http({
+                method: 'POST',
+                url: 'https://w5.crownofthegods.com/includes/gFrep.php', 
+                data: $.param({r: reports[i].id}),
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'}                        
+            }).then(function(results){
+                console.log(results.data);
+            })
+        }
+    }
+
+    function clearCityData(){
+        self.cityDataHash = {};
+        self.cityDataArray = [];
+    }
+
+    function pause(){
+
+    }
+}
+
 
 function mainPage(){
     let self = this;
@@ -254,7 +357,7 @@ function mainPage(){
                                                     <div ng-click="main.switchMode(\'cityData\')" class="ui button">World City Data</div>\
                                                 </div>\
                                                 <div class="field">\
-                                                    <div ng-click="useScoutReports()" class="ui button">Scout Reports</div>\
+                                                    <div ng-click="main.switchMode(\'scoutData\')" class="ui button">Scout Reports</div>\
                                                 </div>\
                                             </div>\
                                         </div>\
@@ -293,11 +396,54 @@ function mainPage(){
                                             </tbody>\
                                         </table>\
                                     </div>\
+                                    \
+                                    <div ng-if="main.mode == \'scoutData\'" ng-controller="scoutDataCtrl as scout" class="ui segment">\
+                                        <div class="ui form">\
+                                            <div class="field">\
+                                                <textarea ng-change="scout.updatePastedData()" ng-model="scout.pastedCityData" rows=4 placeholder="Paste city IDs here"></textarea>\
+                                            </div>\
+                                        </div>\
+                                        <div style="margin: 1em;"></div>\
+                                        <div class="ui form">\
+                                            <div class="inline fields">\
+                                                <div class="field">\
+                                                    <div ng-if="!scout.loading && !scout.validCityPaste" ng-click="scout.getScoutData()" class="ui inverted green button">Load Scout Data</div>\
+                                                    <div ng-if="scout.loading" class="ui disabled button">Loading...</div>\
+                                                    <div ng-if="!scout.paused" class="ui small inverted blue button">Pause</div>\
+                                                    <div ng-if="scout.paused" class="ui small inverted blue button">Resume</div>\
+                                                    <div class="ui inverted orange button">Download CSV</div>\
+                                                </div>\
+                                                <div class="field">\
+                                                    <div ng-click="scout.clearCityData()" class="ui inverted red right floated button">Clear Cities</div>\
+                                                </div>\
+                                            </div>\
+                                            <table class="ui celled small compact table">\
+                                                <thead>\
+                                                    <tr class="center aligned">\
+                                                        <th>City</th>\
+                                                        <th>Owner</th>\
+                                                        <th>Loaded</th>\
+                                                    </tr>\
+                                                </thead>\
+                                                <tbody>\
+                                                    <tr ng-repeat="city in scout.cityDataArray" class="center aligned">\
+                                                        <td ng-bind="city.id">454545454</td>\
+                                                        <td>---</td>\
+                                                        <td>\
+                                                            <i ng-if="city.loaded" class="green check icon"></i>\
+                                                            <i ng-if="!city.loaded" class="red remove icon"></i>\
+                                                        </td>\
+                                                    </tr>\
+                                                </tbody>\
+                                            </table>\
+                                        </div>\
+                                    </div>\
                                 </div>\
                             </div>\
                         </div>\
                     </div>\
-                </div>';
+                </div>\
+                <div style="display: none;" id="reportsTable"></div>';
 
 }
 
@@ -585,6 +731,16 @@ function dataMappings(){
         'isTemple': 'g',
         'name': 'h',
         'id': 'i'
+    };
+
+    self.cityDetailsMap = {
+        'player': 'a',
+        'alliance': 'b',
+        'cityName': 'c',
+        'score': 'd',
+        'coords': 'e',
+        'continent': 'f',
+        'reportTable': 'j'
     };
 }
 
