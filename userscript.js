@@ -25,7 +25,7 @@
     let module = angular.module('app', [])
         .controller('mainController', ['$scope', mainController])
         .controller('cityDataCtrl', ['$scope', '$http', cityDataCtrl])
-        .controller('scoutDataCtrl', ['$scope', '$http', scoutDataCtrl]);
+        .controller('scoutDataCtrl', ['$scope', '$http', '$timeout', scoutDataCtrl]);
 
     angular.bootstrap(document, ['app']);
 
@@ -234,11 +234,12 @@ function cityDataCtrl($scope, $http){
 
 }
 
-function scoutDataCtrl($scope, $http){
+function scoutDataCtrl($scope, $http, $timeout){
     let self = this;
 
     self.loading = false;
     self.paused = false;
+    self.loadDelay = 200;
     self.currentIndex = 0;
     self.pastedCityData = '';
     self.cityDataArray = [];
@@ -282,6 +283,14 @@ function scoutDataCtrl($scope, $http){
                 }).then(function(results){
                     let mapped = mapCityDetails(results.data);
                     let reportsList = parseIndividualReportsFromResultsTable(mapped.reportTable);
+                    debugger;
+                    if(reportsList.length > 0){
+                        getValidReportForCity(reportsList, 0);
+                    } else {
+                        console.log('No Reports');
+                        self.currentIndex ++;
+                        getReportsForCities(); 
+                    }
                 })
             }
         }
@@ -307,23 +316,66 @@ function scoutDataCtrl($scope, $http){
             report.date = $(this).find('[id="reporttimecityinfo"]').text();
             report.type = $(this).find('[id="reportIDcityinfo"]').text();
             report.type = report.type.substring(0, report.type.indexOf(':'));
-            console.log(report);
-            report.push(report);
+            reports.push(report);
         });
         return reports;
     }
 
-    function getValidReportForCity(reports){
-        for(var i = 0; i < reports.length; i++){
+    function getValidReportForCity(reports, index){
+        if(index < reports.length){
             $http({
                 method: 'POST',
                 url: 'https://w5.crownofthegods.com/includes/gFrep.php', 
-                data: $.param({r: reports[i].id}),
+                data: $.param({r: reports[index].id}),
                 headers: {'Content-Type': 'application/x-www-form-urlencoded'}                        
             }).then(function(results){
-                console.log(results.data);
-            })
+                let report = mapAndValidateReport(results.data);
+                if(report){
+                    console.log(report);
+                    setValidReport(report);
+                } else {
+                    $timeout(function(){
+                        getValidReportForCity(reports, index + 1);
+                    }, self.loadDelay);
+                }
+            })            
+        } else {
+            noValidReportsFound();
         }
+    }
+
+    function mapAndValidateReport(data){
+        let report = {};
+        let buildingMapID = self.mappings.reportMap.buildings;
+        report.buildings = {};
+
+        if(typeof data[buildingMapID] === 'undefined' || data[buildingMapID] === null){
+            return false;
+        }
+
+        for(let buildingId in self.mappings.buildingIDs){
+            if(typeof data[buildingMapID][buildingId] !== 'undefined'){
+                report.buildings[self.mappings.buildingIDs[buildingId]] = data[buildingMapID][buildingId];
+            }
+        }
+        return report;
+
+    }
+
+    function setValidReport(report){
+        self.cityDataArray[self.currentIndex].report = report;
+        self.currentIndex ++;
+        $timeout(function(){
+           getReportsForCities();
+        }, self.loadDelay);        
+    }
+
+    function noValidReportsFound(){
+        console.log('No valid reports Found');
+        self.currentIndex ++; //Iterate master index for cities
+        $timeout(function(){
+           getReportsForCities();
+        }, self.loadDelay);   
     }
 
     function clearCityData(){
@@ -349,7 +401,7 @@ function mainPage(){
     self.html = '<div class="ui middle aligned grid child">\
                     <div class="ui center aligned container grid">\
                         <div class="row">\
-                            <div class="ten wide column">\
+                            <div class="twelve wide column">\
                                 <div class="ui basic segment">\
                                      <div ng-if="main.mode == \'none\'"  class="ui segment">\
                                         <div class="ui stacking form">\
@@ -408,15 +460,14 @@ function mainPage(){
                                         <div class="ui form">\
                                             <div class="inline fields">\
                                                 <div class="field">\
-                                                    <div ng-if="!scout.loading && !scout.validCityPaste" ng-click="scout.getScoutData()" class="ui inverted green button">Load Scout Data</div>\
-                                                    <div ng-if="scout.loading" class="ui disabled button">Loading...</div>\
-                                                    <div ng-if="!scout.paused" class="ui small inverted blue button">Pause</div>\
-                                                    <div ng-if="scout.paused" class="ui small inverted blue button">Resume</div>\
-                                                    <div class="ui inverted orange button">Download CSV</div>\
+                                                    <div ng-if="!scout.loading" ng-click="scout.getScoutData()" ng-disabled="scout.cityDataArray.length <= 0" ng-class="{disabled: scout.cityDataArray.length <= 0}" class="ui inverted small green button">Load Scout Data</div>\
+                                                    <div ng-if="scout.loading" class="ui small disabled button">Loading...</div>\
+                                                    <div ng-if="!scout.paused && scout.loading" class="ui small inverted blue button">Pause</div>\
+                                                    <div ng-if="scout.paused && scout.loading" class="ui small inverted blue button">Resume</div>\
+                                                    <div class="ui small inverted orange button">Download CSV</div>\
+                                                    <div ng-click="scout.clearCityData()" class="ui inverted tiny red right floated button">Clear Cities</div>\
                                                 </div>\
-                                                <div class="field">\
-                                                    <div ng-click="scout.clearCityData()" class="ui inverted red right floated button">Clear Cities</div>\
-                                                </div>\
+                                            </div>\
                                             </div>\
                                             <table class="ui celled small compact table">\
                                                 <thead>\
@@ -788,7 +839,6 @@ function dataMappings(){
         890: 'Temple'
     }
 }
-
 
 
 
