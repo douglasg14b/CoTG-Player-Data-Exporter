@@ -134,6 +134,7 @@ function cityDataCtrl($scope, $http){
             } else {
                 self.complete = true;
                 self.loading = false;
+                $scope.$applyAsync();
             }            
         }
     }
@@ -742,6 +743,50 @@ function dataMappings(){
         'continent': 'f',
         'reportTable': 'j'
     };
+
+    self.reportMap = {
+        'buildings': 'bd'
+    }
+
+    self.buildingIDs = {
+        445: 'Barracks',
+        446: 'Cabin',
+        447: 'Farm Estate',
+        448: 'Foresters Hut',
+        449: 'Forum',
+        455: 'Basilica',
+        460: 'Sawmill',
+        461: 'Stone Mine',
+        462: 'Masons Hut',
+        463: 'Grain Mill',
+        464: 'Storehouse',
+        465: 'Iron Mine',
+        466: 'Stables',
+        467: 'Castle',
+        477: 'Smelter',
+        479: 'Hideaway',
+        481: 'Villa',
+        482: 'Academy',
+        483: 'Training Arena',
+        488: 'Port',
+        489: 'Port',
+        490: 'Port',
+        498: 'Shipyard',
+        500: 'Sorcerers Tower',
+        502: 'Blacksmith',
+        504: 'Guard House',
+        539: 'Triari Post',
+        543: 'Ranger Post',
+        547: 'Sentinel Post',
+        551: 'Priest Post',
+        555: 'Balista Post',
+        559: 'Equine Barricade',
+        563: 'Rune Barricade',
+        567: 'Snag Barricade',
+        571: 'Vieled Barricade',
+        809: 'Wall',
+        890: 'Temple'
+    }
 }
 
 
