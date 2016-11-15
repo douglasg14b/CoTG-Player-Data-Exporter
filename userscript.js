@@ -252,11 +252,14 @@ function scoutDataCtrl($scope, $http, $timeout){
     self.getScoutData = getReportsForCities;
 
     function updatePastedData(){
+        clearCityData();
         let idArray = [];
         if(self.pastedCityData.indexOf(',') !== -1){
             idArray = self.pastedCityData.split(',');
         } else if(self.pastedCityData.indexOf('\n') !== -1){
             idArray = self.pastedCityData.split('\n');
+        } else {
+            idArray.push(self.pastedCityData);
         }
         for(let i = 0; i < idArray.length; i++){
             if(!isNaN(idArray[i]) && idArray[i] !== ''){
@@ -844,7 +847,6 @@ function dataMappings(){
         890: 'Temple'
     }
 }
-
 
 
 
