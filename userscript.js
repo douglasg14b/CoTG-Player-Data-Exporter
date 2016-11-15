@@ -291,8 +291,9 @@ function scoutDataCtrl($scope, $http, $timeout){
                 }).then(function(results){
                     let mapped = mapCityDetails(results.data);
                     let reportsList = parseIndividualReportsFromResultsTable(mapped.reportTable);
-                    debugger;
+                    
                     if(reportsList.length > 0){
+                        self.cityDataArray[self.currentIndex].loaded = true;
                         getValidReportForCity(reportsList, 0);
                     } else {
                         console.log('No Reports');
@@ -372,6 +373,7 @@ function scoutDataCtrl($scope, $http, $timeout){
 
     function setValidReport(report){
         self.cityDataArray[self.currentIndex].report = report;
+        self.cityDataArray[self.currentIndex].hasReport = true;
         self.currentIndex ++;
         $timeout(function(){
            getReportsForCities();
@@ -380,6 +382,7 @@ function scoutDataCtrl($scope, $http, $timeout){
 
     function noValidReportsFound(){
         console.log('No valid reports Found');
+        self.cityDataArray[self.currentIndex].hasReport = false;
         self.currentIndex ++; //Iterate master index for cities
         $timeout(function(){
            getReportsForCities();
@@ -483,6 +486,7 @@ function mainPage(){
                                                         <th>City</th>\
                                                         <th>Owner</th>\
                                                         <th>Loaded</th>\
+                                                        <th>Has Valid Reports</th>\
                                                     </tr>\
                                                 </thead>\
                                                 <tbody>\
@@ -492,6 +496,10 @@ function mainPage(){
                                                         <td>\
                                                             <i ng-if="city.loaded" class="green check icon"></i>\
                                                             <i ng-if="!city.loaded" class="red remove icon"></i>\
+                                                        </td>\
+                                                        <td>\
+                                                            <i ng-if="city.hasReport" class="green check icon"></i>\
+                                                            <i ng-if="!city.hasReport" class="red remove icon"></i>\
                                                         </td>\
                                                     </tr>\
                                                 </tbody>\
