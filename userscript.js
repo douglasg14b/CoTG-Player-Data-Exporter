@@ -239,7 +239,8 @@ function scoutDataCtrl($scope, $http, $timeout){
 
     self.loading = false;
     self.paused = false;
-    self.loadDelay = 200;
+    self.complete = false;
+    self.loadDelay = 1000;
     self.currentIndex = 0;
     self.pastedCityData = '';
     self.cityDataArray = [];
@@ -250,6 +251,9 @@ function scoutDataCtrl($scope, $http, $timeout){
     self.updatePastedData = updatePastedData;
     self.clearCityData = clearCityData;
     self.getScoutData = getReportsForCities;
+    self.pause = pause;
+    self.resume = resume;
+    self.downloadCsv = downloadCsv;
 
     function updatePastedData(){
         clearCityData();
@@ -278,7 +282,7 @@ function scoutDataCtrl($scope, $http, $timeout){
         }
     }
 
-    function getReportsForCities(){
+    function getReportsForCities(trycount){
         let data = self.cityDataArray;
         if(!self.paused){
             self.loading = true;
@@ -289,18 +293,42 @@ function scoutDataCtrl($scope, $http, $timeout){
                     data: $.param({a: data[self.currentIndex].id}),
                     headers: {'Content-Type': 'application/x-www-form-urlencoded'}                    
                 }).then(function(results){
-                    let mapped = mapCityDetails(results.data);
-                    let reportsList = parseIndividualReportsFromResultsTable(mapped.reportTable);
-                    
-                    if(reportsList.length > 0){
-                        self.cityDataArray[self.currentIndex].loaded = true;
-                        getValidReportForCity(reportsList, 0);
+                    if(results.data){
+                        let mapped = mapCityDetails(results.data);
+                        let reportsList = parseIndividualReportsFromResultsTable(mapped.reportTable);
+                        
+                        if(reportsList.length > 0){
+                            self.cityDataArray[self.currentIndex].loaded = true;
+                            $timeout(function(){
+                                getValidReportForCity(reportsList, 0);
+                            }, self.loadDelay);
+                        } else {
+                            console.log('No Reports');
+                            self.currentIndex ++;
+                            getReportsForCities(1); 
+                        }
                     } else {
-                        console.log('No Reports');
-                        self.currentIndex ++;
-                        getReportsForCities(); 
+                        if(!trycount){ //If trycount is undefined, set it to 1
+                            trycount = 1;
+                        }
+
+                        if(trycount > 3){
+                            getReportsForCities(1);
+                        }
+
+                        $timeout(function(){
+                            getReportsForCities(trycount + 1);
+                        }, self.loadDelay * 2);                        
                     }
+                }, function(error){
+                    console.error(error);
+                    noValidReportsFound();
                 })
+            } else {
+                self.loading = false;
+                self.paused = false;
+                self.complete = true;
+                console.log(self.cityDataArray);
             }
         }
     }
@@ -311,7 +339,6 @@ function scoutDataCtrl($scope, $http, $timeout){
         for(let prop in self.mappings.cityDetailsMap){
             cityDetails[prop] = data[self.mappings.cityDetailsMap[prop]];
         }
-        console.log(cityDetails);
         return cityDetails;
     }
 
@@ -327,6 +354,7 @@ function scoutDataCtrl($scope, $http, $timeout){
             report.type = report.type.substring(0, report.type.indexOf(':'));
             reports.push(report);
         });
+        $('#reportsTable').html('');
         return reports;
     }
 
@@ -344,9 +372,15 @@ function scoutDataCtrl($scope, $http, $timeout){
                     setValidReport(report);
                 } else {
                     $timeout(function(){
-                        getValidReportForCity(reports, index + 1);
+                        index++;
+                        getValidReportForCity(reports, index);
                     }, self.loadDelay);
                 }
+            }, function(error){
+                $timeout(function(){
+                    index++;
+                    getValidReportForCity(reports, index);
+                }, self.loadDelay);                
             })            
         } else {
             noValidReportsFound();
@@ -365,9 +399,16 @@ function scoutDataCtrl($scope, $http, $timeout){
         for(let buildingId in self.mappings.buildingIDs){
             if(typeof data[buildingMapID][buildingId] !== 'undefined'){
                 report.buildings[self.mappings.buildingIDs[buildingId]] = data[buildingMapID][buildingId];
+            } else {
+                report.buildings[self.mappings.buildingIDs[buildingId]] = 0;
             }
         }
         return report;
+
+    }
+
+    function determineCityType(city){
+        let builds = city.report.buildings;
 
     }
 
@@ -395,7 +436,56 @@ function scoutDataCtrl($scope, $http, $timeout){
     }
 
     function pause(){
+        self.paused = true;
+    }
 
+    function resume(){
+        self.paused = false;
+        console.log(self.cityDataArray);
+        getReportsForCities();
+    }
+
+    /*******************************************
+         ====== Sending/Downloading ======
+    ********************************************/
+
+    function downloadCsv(){
+        let flattened = flattenData(self.cityDataArray);
+
+        let csv = Papa.unparse(flattened);
+        let blob = new Blob([csv], {type: 'text/csv'});
+        let url = window.URL.createObjectURL(blob);
+
+        let a = document.createElement('a');
+        a.href        = url;
+        a.target      = '_blank';
+        a.download    = 'scoutReports.csv';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+    }
+
+    //Flattens the data structure out
+    function flattenData(data){
+        var output = [];
+        for(let i = 0; i < data.length; i++){
+            if(data[i].loaded){
+                if(data[i].hasReport){
+                    let city = data[i].report.buildings;
+                    city.id = data[i].id;
+                    output.push(city);
+                } else {
+                    let city = {}
+                    for(let building in self.mappings.buildingIDs){
+                        city[self.mappings.buildingIDs[building]] = 0;
+                    }
+                    city.id = data[i].id;
+                    output.push(city);
+                }
+            }
+        }
+        console.log(output);
+        return output;
     }
 }
 
@@ -469,13 +559,17 @@ function mainPage(){
                                         </div>\
                                         <div style="margin: 1em;"></div>\
                                         <div class="ui form">\
-                                            <div class="inline fields">\
-                                                <div class="field">\
+                                            <div class="one field">\
+                                                <div ng-if="scout.complete" class="field">\
+                                                    <div class="ui header">All Data Loaded</div>\
+                                                    <div ng-click="scout.downloadCsv()" class="ui small inverted orange button">Download CSV</div>\
+                                                </div>\
+                                                <div ng-if="!scout.complete" class="field">\
                                                     <div ng-if="!scout.loading" ng-click="scout.getScoutData()" ng-disabled="scout.cityDataArray.length <= 0" ng-class="{disabled: scout.cityDataArray.length <= 0}" class="ui inverted small green button">Load Scout Data</div>\
                                                     <div ng-if="scout.loading" class="ui small disabled button">Loading...</div>\
-                                                    <div ng-if="!scout.paused && scout.loading" class="ui small inverted blue button">Pause</div>\
-                                                    <div ng-if="scout.paused && scout.loading" class="ui small inverted blue button">Resume</div>\
-                                                    <div class="ui small inverted orange button">Download CSV</div>\
+                                                    <div ng-if="!scout.paused && scout.loading" ng-click="scout.pause()" class="ui small inverted blue button">Pause</div>\
+                                                    <div ng-if="scout.paused && scout.loading" ng-click="scout.resume()" class="ui small inverted blue button">Resume</div>\
+                                                    <div ng-click="scout.downloadCsv()" class="ui small inverted orange button">Download CSV</div>\
                                                     <div ng-click="scout.clearCityData()" class="ui inverted tiny red right floated button">Clear Cities</div>\
                                                 </div>\
                                             </div>\
@@ -493,14 +587,11 @@ function mainPage(){
                                                     <tr ng-repeat="city in scout.cityDataArray" class="center aligned">\
                                                         <td ng-bind="city.id">454545454</td>\
                                                         <td>---</td>\
-                                                        <td>\
-                                                            <i ng-if="city.loaded" class="green check icon"></i>\
-                                                            <i ng-if="!city.loaded" class="red remove icon"></i>\
-                                                        </td>\
-                                                        <td>\
-                                                            <i ng-if="city.hasReport" class="green check icon"></i>\
-                                                            <i ng-if="!city.hasReport" class="red remove icon"></i>\
-                                                        </td>\
+                                                        <td ng-if="city.loaded" style="background: #e3f3db; color: #0e7910;">Yes</td>\
+                                                        <td ng-if="!city.loaded" style="background: rgba(208, 101, 101, 0.31); color: #b30603;">No</td>\
+                                                        <td ng-if="!city.hasReport && !city.loaded">N/A</td>\
+                                                        <td ng-if="city.hasReport && city.loaded" style="background: #e3f3db; color: #0e7910;">Yes</td>\
+                                                        <td ng-if="!city.hasReport && city.loaded" style="background: rgba(208, 101, 101, 0.31); color: #b30603;">No</td>\
                                                     </tr>\
                                                 </tbody>\
                                             </table>\
@@ -853,7 +944,7 @@ function dataMappings(){
         571: 'Vieled Barricade',
         809: 'Wall',
         890: 'Temple'
-    }
+    };
 }
 
 
