@@ -115,7 +115,7 @@ function cityDataCtrl($scope, $http){
         if(!self.paused){
             self.loading = true;
             if(self.currentIndex < data.length){
-                if(Number(data[self.currentIndex]['3']) > 3){
+                if(Number(data[self.currentIndex]['3']) > 0){
                     console.log(data[self.currentIndex]['1']);
                     $http({
                         method: 'POST',
